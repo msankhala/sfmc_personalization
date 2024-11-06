@@ -1,0 +1,15 @@
+sfmc_personalization.settings:
+  path: '/admin/config/user-interface/sfmc-personalization'
+  defaults:
+    _form: '\Drupal\sfmc_personalization\Form\SFMCPersonalizationSettingsForm'
+    _title: 'SFMC Personalization Settings'
+  requirements:
+    _permission: 'administer site configuration'
+
+sfmc_personalization.pages:
+  path: '/admin/config/user-interface/sfmc-personalization/pages'
+  defaults:
+    _form: '\Drupal\sfmc_personalization\Form\SFMCPersonalizationPagesForm'
+    _title: 'SFMC Personalization Pages'
+  requirements:
+    _permission: 'administer site configuration'

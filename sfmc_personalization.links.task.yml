@@ -1,0 +1,10 @@
+sfmc_personalization.settings:
+  title: 'Global'
+  route_name: sfmc_personalization.settings
+  base_route: sfmc_personalization.settings
+
+sfmc_personalization.pages:
+  title: 'Pages'
+  route_name: sfmc_personalization.pages
+  base_route: sfmc_personalization.settings
+  weight: 100

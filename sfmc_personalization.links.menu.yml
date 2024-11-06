@@ -1,0 +1,6 @@
+sfmc_personalization.settings:
+  title: 'SFMC Personalization'
+  description: 'Configure SFMC personalization settings'
+  parent: system.admin_config_ui
+  route_name: sfmc_personalization.settings
+  weight: 100

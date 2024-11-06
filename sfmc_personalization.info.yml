@@ -1,0 +1,6 @@
+name: SFMC Personalization
+type: module
+description: 'Provides SFMC personalization configuration and integration.'
+package: Salesforce
+core_version_requirement: ^10 || ^11
+configure: sfmc_personalization.settings
