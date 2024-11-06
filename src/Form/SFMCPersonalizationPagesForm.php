@@ -43,6 +43,29 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
     $page_count = $form_state->get('page_count') ?: count($pages);
     $form_state->set('page_count', $page_count);
 
+    // Add default page type selection at the top
+    $form['default_page_type'] = [
+      '#type' => 'container',
+      '#prefix' => '<div id="default-page-wrapper">',
+      '#suffix' => '</div>',
+    ];
+
+    // Only show default page selection if there are pages
+    if ($page_count > 0) {
+      $page_options = [];
+      for ($i = 0; $i < $page_count; $i++) {
+        $page_name = !empty($pages[$i]['name']) ? $pages[$i]['name'] : $this->t('Page type @num', ['@num' => $i + 1]);
+        $page_options[$i] = $page_name;
+      }
+
+      $form['default_page_type']['default_page'] = [
+        '#type' => 'radios',
+        '#title' => $this->t('Default page type'),
+        '#options' => $page_options,
+        '#default_value' => $config->get('default_page') ?? 0,
+      ];
+    }
+
     // Create container for pages
     $form['pages_container'] = [
       '#type' => 'container',
@@ -64,6 +87,11 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
         '#title' => $this->t('name'),
         '#description' => $this->t('Enter the name of the page. This is just for display purpose.'),
         '#default_value' => $pages[$i]['name'] ?? '',
+        '#ajax' => [
+          'callback' => '::updateDefaultPageOptions',
+          'wrapper' => 'default-page-wrapper',
+          'event' => 'change',
+        ],
       ];
 
       $form['pages_container'][$i]['path_type'] = [
@@ -151,8 +179,8 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
         '#name' => 'delete_page_' . $i,
         '#submit' => ['::removePage'],
         '#ajax' => [
-          'callback' => '::updatePages',
-          'wrapper' => 'pages-wrapper',
+          'callback' => '::updateForm',
+          'wrapper' => 'sfmc-personalization-pages-form',
         ],
         '#page_index' => $i,
       ];
@@ -164,12 +192,29 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
       '#value' => $this->t('Add more page'),
       '#submit' => ['::addPage'],
       '#ajax' => [
-        'callback' => '::updatePages',
-        'wrapper' => 'pages-wrapper',
+        'callback' => '::updateForm',
+        'wrapper' => 'sfmc-personalization-pages-form',
       ],
     ];
 
+    $form['#prefix'] = '<div id="sfmc-personalization-pages-form">';
+    $form['#suffix'] = '</div>';
+
     return parent::buildForm($form, $form_state);
+  }
+
+  /**
+   * Ajax callback to update the entire form.
+   */
+  public function updateForm(array &$form, FormStateInterface $form_state) {
+    return $form;
+  }
+
+  /**
+   * Ajax callback to update the default page options.
+   */
+  public function updateDefaultPageOptions(array &$form, FormStateInterface $form_state) {
+    return $form['default_page_type'];
   }
 
   /**
@@ -244,6 +289,11 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
   public function submitForm(array &$form, FormStateInterface $form_state) {
     $config = $this->config('sfmc_personalization.pages');
     $pages = [];
+
+    // Save default page selection
+    if ($form_state->hasValue('default_page')) {
+      $config->set('default_page', $form_state->getValue('default_page'));
+    }
 
     $values = $form_state->getValue('pages_container');
     foreach ($values as $page) {
