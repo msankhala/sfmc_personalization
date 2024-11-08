@@ -7,11 +7,11 @@ use Drupal\user\Entity\User;
  * Implements hook_preprocess_HOOK() for page templates.
  */
 function sfmc_personalization_preprocess_page(array &$variables) {
-  $global_config = \Drupal::config('sfmc_personalization.settings');
-  $pages_config = \Drupal::config('sfmc_personalization.pages');
+  $sfmc_global_config = \Drupal::config('sfmc_personalization.settings');
+  $sfmc_pages_config = \Drupal::config('sfmc_personalization.pages');
 
   // Get domains and convert to array
-  $domains_text = $global_config->get('domain');
+  $domains_text = $sfmc_global_config->get('domain');
   $allowed_domains = [];
   if (!empty($domains_text)) {
     // Split by newline and filter out empty lines
@@ -24,10 +24,10 @@ function sfmc_personalization_preprocess_page(array &$variables) {
     // Trim whitespace from each domain
     $allowed_domains = array_map('trim', $allowed_domains);
   }
-  
+
   $global_settings = [
     'allowed_domains' => $allowed_domains,
-    'content_zones' => $global_config->get('content_zones'),
+    'content_zones' => $sfmc_global_config->get('content_zones'),
   ];
 
   // Fetch user data if the user is logged in.
@@ -35,7 +35,8 @@ function sfmc_personalization_preprocess_page(array &$variables) {
   if ($current_user->isAuthenticated()) {
     $user = User::load($current_user->id());
     $user_data = [];
-    foreach ($global_config->get('user_fields') as $field_name) {
+    $user_fields = $sfmc_global_config->get('user_fields') ?? [];
+    foreach ($user_fields as $field_name) {
       if ($user->hasField($field_name)) {
         $user_data[$field_name] = $user->get($field_name)->value;
       }
@@ -48,14 +49,14 @@ function sfmc_personalization_preprocess_page(array &$variables) {
 
   // Attach the settings to drupalSettings.
   $variables['#attached']['drupalSettings']['sfmc_personalize']['global_config'] = $global_settings;
-  $variables['#attached']['drupalSettings']['sfmc_personalize']['pages_config'] = $pages_config->get('pages');
+  $variables['#attached']['drupalSettings']['sfmc_personalize']['pages_config'] = $sfmc_pages_config->get('pages');
 
 
 
   // Determine where to place the script based on the configuration.
-  $script_location = $global_config->get('script_location');
-  $beacon_script_url = $global_config->get('beacon_script_url');
-  $async = $global_config->get('async') ? 'async' : '';
+  $script_location = $sfmc_global_config->get('script_location');
+  $beacon_script_url = $sfmc_global_config->get('beacon_script_url');
+  $async = $sfmc_global_config->get('async') ? 'async' : '';
 
   if (!empty($beacon_script_url)) {
     $script = [
