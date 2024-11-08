@@ -1,0 +1,73 @@
+sfmc_personalization.settings:
+  type: config_object
+  label: 'SFMC Personalization Settings'
+  mapping:
+    beacon_script_url:
+      type: string
+      label: 'JavaScript Integration Beacon Script URL'
+    async:
+      type: boolean
+      label: 'Async'
+    script_location:
+      type: string
+      label: 'Script Location'
+      constraints:
+        Choice: ['header', 'footer']
+    allowed_domains:
+      type: sequence
+      label: 'Allowed Domains'
+      sequence:
+        type: string
+      validation_criteria: 'valid_domain'
+    content_zones:
+      type: sequence
+      label: 'Global Content Zones'
+      sequence:
+        label: 'Content Zone'
+        mapping:
+          label:
+            type: string
+            label: 'Content Zone label'
+          selector:
+            type: string
+            label: 'Content Zone CSS selector'
+    user_fields:
+      type: sequence
+      label: 'User Fields'
+      sequence:
+        type: string
+      description: 'Map Drupal user fields to SFMC attributes'
+
+sfmc_personalization.pages:
+  type: mapping
+  label: 'SFMC Personalization Pages'
+  mapping:
+    pages:
+      type: sequence
+      label: 'Pages'
+      sequence:
+        - type: mapping
+          label: 'Page'
+          mapping:
+            name:
+              type: string
+              label: 'Page Name'
+            path_type:
+              type: string
+              label: 'Path Type'
+            path:
+              type: string
+              label: 'Path'
+            content_zones:
+              type: sequence
+              label: 'Content Zones'
+              sequence:
+                - type: mapping
+                  label: 'Content Zone'
+                  mapping:
+                    label:
+                      type: string
+                      label: 'Zone Label'
+                    selector:
+                      type: string
+                      label: 'CSS Selector'

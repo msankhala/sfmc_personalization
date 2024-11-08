@@ -4,11 +4,36 @@ namespace Drupal\sfmc_personalization\Form;
 
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Entity\EntityFieldManagerInterface;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
-/**
- * Provides a configuration form for SFMC Personalization settings.
- */
 class SFMCPersonalizationSettingsForm extends ConfigFormBase {
+
+  /**
+   * The entity field manager service.
+   *
+   * @var \Drupal\Core\Entity\EntityFieldManagerInterface
+   */
+  protected $entityFieldManager;
+
+  /**
+   * Constructs a ConfigForm object.
+   *
+   * @param \Drupal\Core\Entity\EntityFieldManagerInterface $entity_field_manager
+   *   The entity field manager service.
+   */
+  public function __construct(EntityFieldManagerInterface $entity_field_manager) {
+    $this->entityFieldManager = $entity_field_manager;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container) {
+    return new static(
+      $container->get('entity_field.manager')
+    );
+  }
 
   /**
    * {@inheritdoc}
@@ -26,12 +51,11 @@ class SFMCPersonalizationSettingsForm extends ConfigFormBase {
 
   /**
    * {@inheritdoc}
-   *
-   * @param array<string, mixed> $form
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
     $config = $this->config('sfmc_personalization.settings');
 
+    // JavaScript Integration section
     $form['beacon_script_url'] = [
       '#type' => 'textfield',
       '#title' => $this->t('JavaScript Integration Beacon Script URL'),
@@ -63,98 +87,160 @@ class SFMCPersonalizationSettingsForm extends ConfigFormBase {
       '#default_value' => $config->get('script_location') ?: 'header',
     ];
 
-    // Allowed Domains
     $form['allowed_domains'] = [
-      '#type' => 'fieldset',
+      '#type' => 'details',
       '#title' => $this->t('Allowed Domains'),
-      '#attributes' => ['id' => 'domains-wrapper'],
+      '#open' => TRUE,
     ];
 
-    $domains = $config->get('allowed_domains') ?: [''];
-    $domain_count = $form_state->get('domain_count') ?: count($domains);
-
-    $form_state->set('domain_count', $domain_count);
-
-    for ($i = 0; $i < $domain_count; $i++) {
-      $form['allowed_domains']['domain_' . $i] = [
-        '#type' => 'textfield',
-        '#title' => $this->t('Domain name @num', ['@num' => $i + 1]),
-        '#default_value' => isset($domains[$i]) ? $domains[$i] : '',
-      ];
-    }
-
-    $form['allowed_domains']['add_domain'] = [
-      '#type' => 'submit',
-      '#value' => $this->t('Add more'),
-      // '#submit' => [$this, 'addMoreDomains'],
-      '#ajax' => [
-        'callback' => [$this, 'addMoreDomains'],
-        'wrapper' => 'domains-wrapper',
-      ],
+    $form['allowed_domains']['domain'] = [
+      '#type' => 'textarea',
+      '#title' => $this->t('Domains List'),
+      '#default_value' => $config->get('domain'),
+      '#description' => $this->t('Specify the domain. You can add multiple domains on separate lines.'),
     ];
-
-    // Global Content Zones
+    
+    // Content Zones fieldset
     $form['content_zones'] = [
       '#type' => 'fieldset',
       '#title' => $this->t('Global Content Zones'),
-      '#attributes' => ['id' => 'zones-wrapper'],
+      '#prefix' => '<div id="zones-wrapper">',
+      '#suffix' => '</div>',
+      '#tree' => TRUE,
     ];
 
-    $zones = $config->get('content_zones') ?: [['label' => '', 'selector' => '']];
-    $zone_count = $form_state->get('zone_count') ?: count($zones);
+    // Get zones from form state or initialize from config
+    if (!$form_state->has('content_zones')) {
+      $stored_zones = $config->get('content_zones') ?: [];
+      $zones = [];
+      foreach ($stored_zones as $zone) {
+        $zones[] = $zone + ['zone_id' => uniqid()];
+      }
+      if (empty($zones)) {
+        $zones[] = ['zone_id' => uniqid(), 'label' => '', 'selector' => ''];
+      }
+      $form_state->set('content_zones', $zones);
+    }
 
-    $form_state->set('zone_count', $zone_count);
+    $zones = $form_state->get('content_zones');
 
-    for ($i = 0; $i < $zone_count; $i++) {
-      $form['content_zones']['zone_' . $i] = [
+    // Build zone fields
+    foreach ($zones as $delta => $zone) {
+      $form['content_zones'][$delta] = [
         '#type' => 'container',
         '#attributes' => ['class' => ['container-inline']],
       ];
-      $form['content_zones']['zone_' . $i]['label'] = [
+
+      // Hidden field to store the zone_id
+      $form['content_zones'][$delta]['zone_id'] = [
+        '#type' => 'hidden',
+        '#value' => $zone['zone_id'],
+      ];
+      
+      $form['content_zones'][$delta]['label'] = [
         '#type' => 'textfield',
         '#title' => $this->t('Content Zone label'),
-        '#default_value' => isset($zones[$i]['label']) ? $zones[$i]['label'] : '',
+        '#default_value' => $zone['label'],
+        '#prefix' => '<div class="zone-field-wrapper">',
       ];
-      $form['content_zones']['zone_' . $i]['selector'] = [
+      
+      $form['content_zones'][$delta]['selector'] = [
         '#type' => 'textfield',
         '#title' => $this->t('Content Zone CSS selector'),
-        '#default_value' => isset($zones[$i]['selector']) ? $zones[$i]['selector'] : '',
+        '#default_value' => $zone['selector'],
       ];
+      
+      if (count($zones) > 1) {
+        $form['content_zones'][$delta]['remove'] = [
+          '#type' => 'submit',
+          '#value' => $this->t('Remove'),
+          '#name' => 'remove_' . $zone['zone_id'],
+          '#submit' => ['::removeZone'],
+          '#ajax' => [
+            'callback' => '::ajaxRefreshContentZones',
+            'wrapper' => 'zones-wrapper',
+          ],
+          '#suffix' => '</div>',
+          '#zone_id' => $zone['zone_id'],
+        ];
+      }
     }
 
-    $form['content_zones']['add_zone'] = [
+    $form['content_zones']['add_more'] = [
       '#type' => 'submit',
       '#value' => $this->t('Add more'),
-      // '#submit' => ['::addMoreZones'],
+      '#submit' => ['::addMoreZones'],
       '#ajax' => [
-        'callback' => [$this, 'addMoreZones'],
+        'callback' => '::ajaxRefreshContentZones',
         'wrapper' => 'zones-wrapper',
       ],
     ];
 
-    // User Attributes
+    // User Attributes section
+    $user_fields = $this->entityFieldManager->getFieldDefinitions('user', 'user');
+    $options = [];
+    foreach ($user_fields as $field_name => $field_definition) {
+      $options[$field_name] = $field_definition->getLabel();
+    }
+
     $form['user_attributes'] = [
       '#type' => 'fieldset',
       '#title' => $this->t('Expose User Attributes'),
     ];
 
-    $attributes = [
-      'first_name' => $this->t('First Name'),
-      'last_name' => $this->t('Last Name'),
-      'persona' => $this->t('Persona'),
-      'zipcode' => $this->t('Zipcode'),
-      'recipe_preferences' => $this->t('Recipe Preferences'),
+    $form['user_attributes']['user_fields'] = [
+      '#type' => 'checkboxes',
+      '#title' => $this->t('Select User Fields'),
+      '#description' => $this->t('Choose the user fields you want to enable.'),
+      '#options' => $options,
+      '#default_value' => array_intersect_key(array_flip($config->get('user_fields') ?? []), $options),
     ];
 
-    foreach ($attributes as $key => $label) {
-      $form['user_attributes'][$key] = [
-        '#type' => 'checkbox',
-        '#title' => $label,
-        '#default_value' => $config->get('user_attributes.' . $key),
-      ];
-    }
-
     return parent::buildForm($form, $form_state);
+  }
+
+  /**
+   * Ajax callback for refreshing content zones.
+   */
+  public function ajaxRefreshContentZones(array &$form, FormStateInterface $form_state) {
+    return $form['content_zones'];
+  }
+
+  /**
+   * Submit handler to add more content zones.
+   */
+  public function addMoreZones(array &$form, FormStateInterface $form_state) {
+    $zones = $form_state->get('content_zones');
+    $zones[] = [
+      'zone_id' => uniqid(),
+      'label' => '',
+      'selector' => '',
+    ];
+    $form_state->set('content_zones', $zones);
+    $form_state->setRebuild(TRUE);
+  }
+
+  /**
+   * Submit handler to remove a content zone.
+   */
+  public function removeZone(array &$form, FormStateInterface $form_state) {
+    $triggering_element = $form_state->getTriggeringElement();
+    $zone_id_to_remove = $triggering_element['#zone_id'];
+    
+    $zones = $form_state->get('content_zones');
+    
+    // Find and remove the zone with the matching zone_id
+    foreach ($zones as $delta => $zone) {
+      if ($zone['zone_id'] === $zone_id_to_remove) {
+        unset($zones[$delta]);
+        break;
+      }
+    }
+    
+    // Reindex the array
+    $zones = array_values($zones);
+    $form_state->set('content_zones', $zones);
+    $form_state->setRebuild(TRUE);
   }
 
   /**
@@ -162,71 +248,32 @@ class SFMCPersonalizationSettingsForm extends ConfigFormBase {
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
     $config = $this->config('sfmc_personalization.settings');
-
+    
     // Save basic settings
-    $config->set('beacon_script_url', $form_state->getValue('beacon_script_url'))
+    $config
+      ->set('beacon_script_url', $form_state->getValue('beacon_script_url'))
       ->set('async', $form_state->getValue('async'))
-      ->set('script_location', $form_state->getValue('script_location'));
+      ->set('script_location', $form_state->getValue('script_location'))
+      ->set('domain', $form_state->getValue('domain'))
+      ->set('user_fields', array_filter($form_state->getValue('user_fields')));
 
-    // Save domains
-    $domains = [];
-    $domain_count = $form_state->get('domain_count');
-    for ($i = 0; $i < $domain_count; $i++) {
-      if ($domain = $form_state->getValue('domain_' . $i)) {
-        $domains[] = $domain;
-      }
-    }
-    $config->set('allowed_domains', $domains);
-
-    // Save content zones
+    // Save content zones (remove zone_id before saving)
     $zones = [];
-    $zone_count = $form_state->get('zone_count');
-    for ($i = 0; $i < $zone_count; $i++) {
-      $label = $form_state->getValue(['zone_' . $i, 'label']);
-      $selector = $form_state->getValue(['zone_' . $i, 'selector']);
-      if ($label || $selector) {
-        $zones[] = [
-          'label' => $label,
-          'selector' => $selector,
-        ];
+    $values = $form_state->getValue('content_zones');
+    if (!empty($values) && is_array($values)) {
+      foreach ($values as $zone) {
+        if (is_array($zone) && isset($zone['label'], $zone['selector']) && 
+            !empty($zone['label']) && !empty($zone['selector'])) {
+          $zones[] = [
+            'label' => $zone['label'],
+            'selector' => $zone['selector'],
+          ];
+        }
       }
     }
     $config->set('content_zones', $zones);
-
-    // Save user attributes
-    $attributes = [
-      'first_name',
-      'last_name',
-      'persona',
-      'zipcode',
-      'recipe_preferences',
-    ];
-    foreach ($attributes as $attribute) {
-      $config->set('user_attributes.' . $attribute, $form_state->getValue($attribute));
-    }
-
+    
     $config->save();
-
     parent::submitForm($form, $form_state);
-  }
-
-  /**
-   * Ajax callback for adding more domains.
-   */
-  public function addMoreDomains(array &$form, FormStateInterface $form_state) {
-    $domain_count = $form_state->get('domain_count');
-    $form_state->set('domain_count', $domain_count + 1);
-    $form_state->setRebuild();
-    return $form['allowed_domains'];
-  }
-
-  /**
-   * Ajax callback for adding more content zones.
-   */
-  public function addMoreZones(array &$form, FormStateInterface $form_state) {
-    $zone_count = $form_state->get('zone_count');
-    $form_state->set('zone_count', $zone_count + 1);
-    $form_state->setRebuild();
-    return $form['content_zones'];
   }
 }

@@ -1,0 +1,5 @@
+sfmc_personalization:
+  js:
+    js/sfmc_personalization.js: {}
+  dependencies:
+    - core/drupalSettings

@@ -1,0 +1,6 @@
+beacon_script_url: ''
+async: false
+script_location: 'header'
+allowed_domains: []
+content_zones: []
+user_fields: []
