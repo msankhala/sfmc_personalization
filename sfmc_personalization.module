@@ -1,0 +1,106 @@
+<?php
+
+use Drupal\Core\Render\Element;
+use Drupal\user\Entity\User;
+
+/**
+ * Implements hook_preprocess_HOOK() for page templates.
+ */
+function sfmc_personalization_preprocess_page(array &$variables) {
+  $global_config = \Drupal::config('sfmc_personalization.settings');
+  $pages_config = \Drupal::config('sfmc_personalization.pages');
+
+  // Get domains and convert to array
+  $domains_text = $global_config->get('domain');
+  $allowed_domains = [];
+  if (!empty($domains_text)) {
+    // Split by newline and filter out empty lines
+    $allowed_domains = array_filter(
+      explode("\n", $domains_text),
+      function($domain) {
+        return !empty(trim($domain));
+      }
+    );
+    // Trim whitespace from each domain
+    $allowed_domains = array_map('trim', $allowed_domains);
+  }
+  
+  $global_settings = [
+    'allowed_domains' => $allowed_domains,
+    'content_zones' => $global_config->get('content_zones'),
+  ];
+
+  // Fetch user data if the user is logged in.
+  $current_user = \Drupal::currentUser();
+  if ($current_user->isAuthenticated()) {
+    $user = User::load($current_user->id());
+    $user_data = [];
+    foreach ($global_config->get('user_fields') as $field_name) {
+      if ($user->hasField($field_name)) {
+        $user_data[$field_name] = $user->get($field_name)->value;
+      }
+      if ($field_name == 'field_user_preferences') {
+        $user_data[$field_name]['preferences'] = getUserPreferences($user->field_user_preferences->referencedEntities());
+      }
+    }
+    $global_settings['user_data'] = $user_data;
+  }
+
+  // Attach the settings to drupalSettings.
+  $variables['#attached']['drupalSettings']['sfmc_personalize']['global_config'] = $global_settings;
+  $variables['#attached']['drupalSettings']['sfmc_personalize']['pages_config'] = $pages_config->get('pages');
+
+
+
+  // Determine where to place the script based on the configuration.
+  $script_location = $global_config->get('script_location');
+  $beacon_script_url = $global_config->get('beacon_script_url');
+  $async = $global_config->get('async') ? 'async' : '';
+
+  if (!empty($beacon_script_url)) {
+    $script = [
+      '#type' => 'html_tag',
+      '#tag' => 'script',
+      '#attributes' => [
+        'src' => $beacon_script_url,
+        $async => $async,
+      ],
+    ];
+
+    if ($script_location === 'header') {
+      $variables['#attached']['html_head'][] = [$script, 'sfmc_personalization_beacon_script'];
+    } else {
+      // Attach the library to ensure the script is added to the footer.
+      $variables['#attached']['library'][] = 'sfmc_personalization/sfmc_personalization';
+      // Add the script to the footer using a custom render array.
+      $variables['#attached']['html_head'][] = [
+        [
+          '#type' => 'html_tag',
+          '#tag' => 'script',
+          '#attributes' => [
+            'src' => $beacon_script_url,
+            $async => $async,
+          ],
+        ],
+        'sfmc_personalization_beacon_script_footer',
+      ];
+    }
+  }
+}
+
+function getUserPreferences($preferencesEntities) {
+  $preferences = [];
+  if (count($preferencesEntities) >= 1) {
+    foreach ($preferencesEntities as $preference) {
+      $preferences = [
+        'Courses' => $preference->field_courses->getValue(),
+        'Dietary Color' => $preference->field_dietary_color->getValue(),
+        'Meals' => $preference->field_meals->getValue(),
+        'Filters' => $preference->field_other_filters->getValue(),
+        'Exclusions' => $preference->field_exclusion->getValue(),
+        'Diet' => $preference->field_dietary->getValue(),
+      ];
+    }
+  }
+  return ($preferences);
+}

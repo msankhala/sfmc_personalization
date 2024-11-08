@@ -1,0 +1,7 @@
+   pages:
+     - name: 'Default Page'
+       path_type: 'url'
+       path: '/default-path'
+       content_zones:
+         - label: 'Default Zone'
+           selector: '.default-selector'
