@@ -78,7 +78,7 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
     for ($i = 0; $i < $page_count; $i++) {
       $form['pages_container'][$i] = [
         '#type' => 'details',
-        '#title' => $this->t('Page type @num', ['@num' => $i + 1]),
+        '#title' => $this->t('Page type @num - @name', ['@num' => $i + 1, '@name' => $pages[$i]['name']]),
         '#open' => TRUE,
       ];
 
