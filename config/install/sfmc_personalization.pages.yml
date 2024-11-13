@@ -1,7 +1,12 @@
 pages:
   - name: 'Default Page'
+    machine_name: 'default_page'
     path_type: 'url'
     path: '/default-path'
+    status: true
+    weight: 0
     content_zones:
       - label: 'Default Zone'
+        machine_name: 'default_zone'
         selector: '.default-selector'
+        weight: 0

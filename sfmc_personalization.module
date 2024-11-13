@@ -51,57 +51,73 @@ function sfmc_personalization_preprocess_page(array &$variables) {
   $variables['#attached']['drupalSettings']['sfmc_personalize']['global_config'] = $global_settings;
   $variables['#attached']['drupalSettings']['sfmc_personalize']['pages_config'] = $sfmc_pages_config->get('pages');
 
+}
 
+/**
+ * Implements hook_page_bottom().
+ */
+function sfmc_personalization_page_bottom(array &$page_bottom) {
+  // Get configuration settings.
+  $global_config = \Drupal::config('sfmc_personalization.settings');
+  $script_location = $global_config->get('script_location');
+  $beacon_script_url = $global_config->get('beacon_script_url');
 
-  // Determine where to place the script based on the configuration.
-  $script_location = $sfmc_global_config->get('script_location');
-  $beacon_script_url = $sfmc_global_config->get('beacon_script_url');
-  $async = $sfmc_global_config->get('async') ? 'async' : '';
+  // Only proceed if the URL is defined and the location is 'footer'.
+  $location = !empty($beacon_script_url) && $script_location == 'footer' ? 'bottom' : 'top';
+  add_beacon_script_tag($beacon_script_url, $page_bottom, $location);
+}
 
-  if (!empty($beacon_script_url)) {
+/**
+ * Get User Preferences data.
+ */
+function getUserPreferences($preferencesEntities) {
+  $preferences = [];
+  foreach ($preferencesEntities as $preference) {
+    $preferences[] = [
+      'Courses' => $preference->field_courses->getValue(),
+      'Dietary Color' => $preference->field_dietary_color->getValue(),
+      'Meals' => $preference->field_meals->getValue(),
+      'Filters' => $preference->field_other_filters->getValue(),
+      'Exclusions' => $preference->field_exclusion->getValue(),
+      'Diet' => $preference->field_dietary->getValue(),
+    ];
+  }
+  return $preferences;
+}
+
+/**
+ * Adds a script tag to the specified page location.
+ */
+function add_beacon_script_tag($script_url, &$renderer, $region) {
+  // Retrieve async configuration.
+  $global_config = \Drupal::config('sfmc_personalization.settings');
+  $async = $global_config->get('async') ? 'async' : '';
+
+  // Build the script render array.
+  if ($async) {
     $script = [
       '#type' => 'html_tag',
       '#tag' => 'script',
       '#attributes' => [
-        'src' => $beacon_script_url,
-        $async => $async,
+        'src' => $script_url,
+        $async => TRUE,
       ],
     ];
-
-    if ($script_location === 'header') {
-      $variables['#attached']['html_head'][] = [$script, 'sfmc_personalization_beacon_script'];
-    } else {
-      // Attach the library to ensure the script is added to the footer.
-      $variables['#attached']['library'][] = 'sfmc_personalization/sfmc_personalization';
-      // Add the script to the footer using a custom render array.
-      $variables['#attached']['html_head'][] = [
-        [
-          '#type' => 'html_tag',
-          '#tag' => 'script',
-          '#attributes' => [
-            'src' => $beacon_script_url,
-            $async => $async,
-          ],
-        ],
-        'sfmc_personalization_beacon_script_footer',
-      ];
-    }
   }
-}
-
-function getUserPreferences($preferencesEntities) {
-  $preferences = [];
-  if (count($preferencesEntities) >= 1) {
-    foreach ($preferencesEntities as $preference) {
-      $preferences = [
-        'Courses' => $preference->field_courses->getValue(),
-        'Dietary Color' => $preference->field_dietary_color->getValue(),
-        'Meals' => $preference->field_meals->getValue(),
-        'Filters' => $preference->field_other_filters->getValue(),
-        'Exclusions' => $preference->field_exclusion->getValue(),
-        'Diet' => $preference->field_dietary->getValue(),
-      ];
-    }
+  else {
+    $script = [
+      '#type' => 'html_tag',
+      '#tag' => 'script',
+      '#attributes' => [
+        'src' => $script_url,
+      ],
+    ];
   }
-  return ($preferences);
+
+  // Attach to the specified region.
+  if ($region == 'top') {
+    $renderer['#attached']['html_head'][] = [$script, 'sfmc_personalization_beacon_script'];
+  } else {
+    $renderer[$region . '_scripts'] = $script;
+  }
 }

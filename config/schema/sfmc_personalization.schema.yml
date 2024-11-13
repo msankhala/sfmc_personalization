@@ -14,7 +14,7 @@ sfmc_personalization.settings:
       constraints:
         Choice: ['header', 'footer']
     allowed_domains:
-      type: sequence
+      type: string
       label: 'Allowed Domains'
       sequence:
         type: string
@@ -39,35 +39,36 @@ sfmc_personalization.settings:
       description: 'Map Drupal user fields to SFMC attributes'
 
 sfmc_personalization.pages:
-  type: mapping
-  label: 'SFMC Personalization Pages'
+  type: config_object
+  label: 'SFMC Personalization Pages Settings'
   mapping:
+    default_page:
+      type: integer
+      label: 'Default page type index'
     pages:
       type: sequence
-      label: 'Pages'
+      label: 'Personalization pages'
       sequence:
-        - type: mapping
-          label: 'Page'
-          mapping:
-            name:
-              type: string
-              label: 'Page Name'
-            path_type:
-              type: string
-              label: 'Path Type'
-            path:
-              type: string
-              label: 'Path'
-            content_zones:
-              type: sequence
-              label: 'Content Zones'
-              sequence:
-                - type: mapping
-                  label: 'Content Zone'
-                  mapping:
-                    label:
-                      type: string
-                      label: 'Zone Label'
-                    selector:
-                      type: string
-                      label: 'CSS Selector'
+        type: mapping
+        mapping:
+          name:
+            type: string
+            label: 'Page name'
+          path_type:
+            type: string
+            label: 'Path type'
+          path:
+            type: string
+            label: 'Path pattern'
+          content_zones:
+            type: sequence
+            label: 'Content zones'
+            sequence:
+              type: mapping
+              mapping:
+                label:
+                  type: string
+                  label: 'Content zone label'
+                selector:
+                  type: string
+                  label: 'CSS selector'
