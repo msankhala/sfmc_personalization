@@ -54,18 +54,126 @@ function sfmc_personalization_preprocess_page(array &$variables) {
 }
 
 /**
+ * Implements hook_library_info_build().
+ * Dynamically builds library definitions.
+ */
+function sfmc_personalization_library_info_build() {
+  $libraries = [];
+
+  $global_config = \Drupal::config('sfmc_personalization.settings');
+  $beacon_script_url = $global_config->get('beacon_script_url');
+  $async = $global_config->get('async') ? 'async' : '';
+  $defer = $global_config->get('defer') ? 'defer' : '';
+
+  if ($beacon_script_url) {
+    $libraries['dynamic-external-sfmc-beacon'] = [
+      'js' => [
+        $beacon_script_url => [
+          'type' => 'external',
+          'minified' => true,
+          'attributes' => [
+            'defer' => $defer ? TRUE : FALSE,
+            'async' => $async ? TRUE : FALSE,
+          ],
+        ],
+      ],
+      'dependencies' => [
+        'core/drupal',
+        'core/drupalSettings'
+      ],
+    ];
+  }
+
+  return $libraries;
+}
+
+/**
+ * Implements hook_page_attachments().
+ */
+function sfmc_personalization_page_attachments(array &$attachments) {
+  // Get configuration settings.
+  $attachments['#attached']['library'][] = 'sfmc_personalization/dynamic-external-sfmc-beacon';
+}
+
+/**
+ * Implements hook_preprocess_html().
+ * Alternative approach for footer scripts
+ */
+// function sfmc_personalization_preprocess_html(&$variables) {
+//   $global_config = \Drupal::config('sfmc_personalization.settings');
+//   $script_location = $global_config->get('script_location');
+//   $beacon_script_url = $global_config->get('beacon_script_url');
+
+//   if ($script_location === 'footer') {
+//     $script_markup = [
+//       '#type' => 'html_tag',
+//       '#tag' => 'script',
+//       '#attributes' => [
+//         'src' => $beacon_script_url,
+//       ],
+//       '#weight' => 10000,
+//       '#dependencies' => [
+//         'library' => [
+//           'core/drupal',
+//           'core/drupalSettings',
+//         ],
+//       ],
+//     ];
+
+//     $variables['page_bottom']['your_script'] = $script_markup;
+//   }
+// }
+
+/**
  * Implements hook_page_bottom().
  */
-function sfmc_personalization_page_bottom(array &$page_bottom) {
-  // Get configuration settings.
-  $global_config = \Drupal::config('sfmc_personalization.settings');
-  $script_location = $global_config->get('script_location');
-  $beacon_script_url = $global_config->get('beacon_script_url');
+// function sfmc_personalization_page_bottom(array &$page_bottom) {
+//   // Get configuration settings.
+//   $global_config = \Drupal::config('sfmc_personalization.settings');
+//   $script_location = $global_config->get('script_location');
+//   $beacon_script_url = $global_config->get('beacon_script_url');
 
-  // Only proceed if the URL is defined and the location is 'footer'.
-  $location = !empty($beacon_script_url) && $script_location == 'footer' ? 'bottom' : 'top';
-  add_beacon_script_tag($beacon_script_url, $page_bottom, $location);
-}
+//   // Only proceed if the URL is defined and the location is 'footer'.
+//   $location = !empty($beacon_script_url) && $script_location == 'footer' ? 'bottom' : 'top';
+//   add_beacon_script_tag($beacon_script_url, $page_bottom, $location);
+// }
+
+/**
+ * Adds a script tag to the specified page location.
+ */
+// function add_beacon_script_tag($script_url, &$renderer, $region) {
+//   // Retrieve async configuration.
+//   $global_config = \Drupal::config('sfmc_personalization.settings');
+//   $async = $global_config->get('async') ? 'async' : '';
+
+//   // Build the script render array.
+//   if ($async) {
+//     $script = [
+//       '#type' => 'html_tag',
+//       '#tag' => 'script',
+//       '#attributes' => [
+//         'src' => $script_url,
+//         $async => TRUE,
+//       ],
+//     ];
+//   }
+//   else {
+//     $script = [
+//       '#type' => 'html_tag',
+//       '#tag' => 'script',
+//       '#attributes' => [
+//         'src' => $script_url,
+//       ],
+//     ];
+//   }
+
+//   // Attach to the specified region.
+//   if ($region == 'top') {
+//     $renderer['#attached']['html_head'][] = [$script, 'sfmc_personalization_beacon_script'];
+//   } else {
+//     $renderer[$region . '_scripts'] = $script;
+//   }
+// }
 
 /**
  * Get User Preferences data.
@@ -83,41 +191,4 @@ function getUserPreferences($preferencesEntities) {
     ];
   }
   return $preferences;
-}
-
-/**
- * Adds a script tag to the specified page location.
- */
-function add_beacon_script_tag($script_url, &$renderer, $region) {
-  // Retrieve async configuration.
-  $global_config = \Drupal::config('sfmc_personalization.settings');
-  $async = $global_config->get('async') ? 'async' : '';
-
-  // Build the script render array.
-  if ($async) {
-    $script = [
-      '#type' => 'html_tag',
-      '#tag' => 'script',
-      '#attributes' => [
-        'src' => $script_url,
-        $async => TRUE,
-      ],
-    ];
-  }
-  else {
-    $script = [
-      '#type' => 'html_tag',
-      '#tag' => 'script',
-      '#attributes' => [
-        'src' => $script_url,
-      ],
-    ];
-  }
-
-  // Attach to the specified region.
-  if ($region == 'top') {
-    $renderer['#attached']['html_head'][] = [$script, 'sfmc_personalization_beacon_script'];
-  } else {
-    $renderer[$region . '_scripts'] = $script;
-  }
 }
