@@ -4,11 +4,39 @@ namespace Drupal\sfmc_personalization\Form;
 
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Provides the SFMC Personalization pages configuration form.
  */
 class SFMCPersonalizationPagesForm extends ConfigFormBase {
+
+  /**
+   * The entity type manager.
+   *
+   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
+   */
+  protected $entityTypeManager;
+
+  /**
+   * Constructs a new SFMCPersonalizationPagesForm.
+   *
+   * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
+   *   The entity type manager.
+   */
+  public function __construct(EntityTypeManagerInterface $entity_type_manager) {
+    $this->entityTypeManager = $entity_type_manager;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container) {
+    return new static(
+      $container->get('entity_type.manager')
+    );
+  }
 
   /**
    * {@inheritdoc}
@@ -25,6 +53,21 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
   }
 
   /**
+   * Gets available content types.
+   *
+   * @return array
+   *   Array of content type labels keyed by machine name.
+   */
+  protected function getContentTypes() {
+    $content_types = [];
+    $types = $this->entityTypeManager->getStorage('node_type')->loadMultiple();
+    foreach ($types as $type) {
+      $content_types[$type->id()] = $type->label();
+    }
+    return $content_types;
+  }
+
+  /**
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
@@ -34,40 +77,29 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
     $pages = $config->get('pages') ?: [
       [
         'name' => '',
-        'path_type' => 'url',
+        'condition_type' => 'path',
         'path' => '',
+        'regex' => '',
+        'content_types' => [],
         'content_zones' => [],
       ]
     ];
 
+    $pages = $form_state->getValue('pages_container', $pages);
+
     $page_count = $form_state->get('page_count') ?: count($pages);
     $form_state->set('page_count', $page_count);
 
-    // Add default page type selection at the top
-    $form['default_page_type'] = [
+    // Add a wrapper div for the draggable elements.
+    $form['draggable_elements'] = [
       '#type' => 'container',
-      '#prefix' => '<div id="default-page-wrapper">',
-      '#suffix' => '</div>',
+      '#attributes' => [
+        'class' => ['draggable-elements-wrapper'],
+      ],
     ];
 
-    // Only show default page selection if there are pages
-    if ($page_count > 0) {
-      $page_options = [];
-      for ($i = 0; $i < $page_count; $i++) {
-        $page_name = !empty($pages[$i]['name']) ? $pages[$i]['name'] : $this->t('Page type @num', ['@num' => $i + 1]);
-        $page_options[$i] = $page_name;
-      }
-
-      $form['default_page_type']['default_page'] = [
-        '#type' => 'radios',
-        '#title' => $this->t('Default page type'),
-        '#options' => $page_options,
-        '#default_value' => $config->get('default_page') ?? 0,
-      ];
-    }
-
     // Create container for pages
-    $form['pages_container'] = [
+    $form['draggable_elements']['pages_container'] = [
       '#type' => 'container',
       '#tree' => TRUE,
       '#prefix' => '<div id="pages-wrapper">',
@@ -76,43 +108,88 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
 
     // Build form elements for each page
     for ($i = 0; $i < $page_count; $i++) {
-      $form['pages_container'][$i] = [
+      $form['draggable_elements']['pages_container'][$i] = [
         '#type' => 'details',
         '#title' => $this->t('Page type @num - @name', ['@num' => $i + 1, '@name' => $pages[$i]['name']]),
-        '#open' => TRUE,
+        '#open' => FALSE,
       ];
 
-      $form['pages_container'][$i]['name'] = [
+      $form['draggable_elements']['pages_container'][$i]['name'] = [
         '#type' => 'textfield',
         '#title' => $this->t('name'),
         '#description' => $this->t('Enter the name of the page. This is just for display purpose.'),
         '#default_value' => $pages[$i]['name'] ?? '',
+        // '#ajax' => [
+        //   'callback' => '::updateDefaultPageOptions',
+        //   'wrapper' => 'default-page-wrapper',
+        //   'event' => 'change',
+        // ],
+      ];
+
+      $form['draggable_elements']['pages_container'][$i]['condition_type'] = [
+        '#type' => 'select',
+        '#title' => $this->t('Conditoin Type'),
+        '#options' => [
+          'path' => $this->t('Path'),
+          'regex' => $this->t('Regex'),
+          'content_type' => $this->t('Content Type'),
+        ],
+        '#default_value' => $pages[$i]['condition_type'] ?? 'path',
         '#ajax' => [
-          'callback' => '::updateDefaultPageOptions',
-          'wrapper' => 'default-page-wrapper',
+          'callback' => '::updateConditionField',
+          'wrapper' => 'condition-field-wrapper-' . $i,
           'event' => 'change',
         ],
       ];
 
-      $form['pages_container'][$i]['path_type'] = [
-        '#type' => 'select',
-        '#title' => $this->t('Path Type'),
-        '#options' => [
-          'url' => $this->t('URL'),
-          'regex' => $this->t('Regex'),
-        ],
-        '#default_value' => $pages[$i]['path_type'] ?? 'url',
+      // Container for condition field with ajax wrapper
+      $form['draggable_elements']['pages_container'][$i]['condition_wrapper'] = [
+        '#type' => 'container',
+        '#prefix' => '<div id="condition-field-wrapper-' . $i . '">',
+        '#suffix' => '</div>',
       ];
 
-      $form['pages_container'][$i]['path'] = [
-        '#type' => 'textfield',
-        '#title' => $this->t('Path'),
-        '#description' => $this->t('Enter the path that will match against the website location pathname.'),
-        '#default_value' => $pages[$i]['path'] ?? '',
-      ];
+      // Get the current condition type from form state or default
+      $condition_type = $form_state->getValue(['draggable_elements', 'pages_container', $i, 'condition_type'])
+        ?? $pages[$i]['condition_type']
+        ?? 'path';
+
+      // Build appropriate condition field based on condition type.
+      switch ($condition_type) {
+        case 'path':
+          $form['draggable_elements']['pages_container'][$i]['condition_wrapper']['path'] = [
+            '#type' => 'textfield',
+            '#title' => $this->t('Path'),
+            '#description' => $this->t('Enter the relative path (e.g., /about-us)'),
+            '#default_value' => $pages[$i]['path'] ?? '',
+            // '#field_prefix' => '/',
+          ];
+          break;
+
+        case 'regex':
+          $form['draggable_elements']['pages_container'][$i]['condition_wrapper']['regex'] = [
+            '#type' => 'textfield',
+            '#title' => $this->t('Regex Pattern'),
+            '#description' => $this->t('Enter a valid regular expression (e.g., ^/blog/.*$)'),
+            '#default_value' => $pages[$i]['regex'] ?? '',
+            '#element_validate' => ['::validateRegexPattern'],
+          ];
+          break;
+
+        case 'content_type':
+          $form['draggable_elements']['pages_container'][$i]['condition_wrapper']['content_type'] = [
+            '#type' => 'select',
+            '#title' => $this->t('Content Type'),
+            '#description' => $this->t('Select the content type to apply personalization'),
+            '#options' => $this->getContentTypes(),
+            '#multiple' => TRUE,
+            '#default_value' => $pages[$i]['content_type'] ?? '',
+          ];
+          break;
+      }
 
       // Content Zones fieldset for this page
-      $form['pages_container'][$i]['content_zones'] = [
+      $form['draggable_elements']['pages_container'][$i]['content_zones'] = [
         '#type' => 'fieldset',
         '#title' => $this->t('Content Zones'),
         '#prefix' => '<div id="content-zones-wrapper-' . $i . '">',
@@ -120,32 +197,36 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
       ];
 
       // Get or initialize content zones for this page
-      $zones = $pages[$i]['content_zones'] ?? [['label' => '', 'selector' => '']];
-      $zone_count = $form_state->get('zone_count_' . $i) ?: count($zones);
-      $form_state->set('zone_count_' . $i, $zone_count);
+      $zones = $pages[$i]['content_zones'] ?? [['name' => '', 'selector' => '']];
+      // When form rebuilds after ajax callback, always take the values from
+      // $form_state instead of from stored config.
+      $zones = $form_state->getValue(['pages_container', $i, 'content_zones'], $zones);
+      $zone_count = $form_state->get(['page_count_' . $i, 'zone_count']) ?: count($zones);
+      $form_state->set(['page_count_' . $i, 'zone_count'], $zone_count);
+      $test = $form_state->get(['page_count_' . $i, 'zone_count']);
 
       // Build form elements for each content zone
       for ($j = 0; $j < $zone_count; $j++) {
-        $form['pages_container'][$i]['content_zones'][$j] = [
+        $form['draggable_elements']['pages_container'][$i]['content_zones'][$j] = [
           '#type' => 'container',
           '#attributes' => ['class' => ['container-inline']],
         ];
 
-        $form['pages_container'][$i]['content_zones'][$j]['label'] = [
+        $form['draggable_elements']['pages_container'][$i]['content_zones'][$j]['name'] = [
           '#type' => 'textfield',
-          '#title' => $this->t('Content Zone label'),
-          '#default_value' => $zones[$j]['label'] ?? '',
+          '#title' => $this->t('Content Zone name'),
+          '#default_value' => $zones[$j]['name'] ?? '',
           '#size' => 30,
         ];
 
-        $form['pages_container'][$i]['content_zones'][$j]['selector'] = [
+        $form['draggable_elements']['pages_container'][$i]['content_zones'][$j]['selector'] = [
           '#type' => 'textfield',
           '#title' => $this->t('Content Zone CSS selector'),
           '#default_value' => $zones[$j]['selector'] ?? '',
           '#size' => 30,
         ];
 
-        $form['pages_container'][$i]['content_zones'][$j]['delete'] = [
+        $form['draggable_elements']['pages_container'][$i]['content_zones'][$j]['delete'] = [
           '#type' => 'submit',
           '#value' => $this->t('Delete'),
           '#name' => 'delete_zone_' . $i . '_' . $j,
@@ -160,7 +241,7 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
       }
 
       // Add more zones button
-      $form['pages_container'][$i]['content_zones']['add_zone'] = [
+      $form['draggable_elements']['pages_container'][$i]['content_zones']['add_zone'] = [
         '#type' => 'submit',
         '#value' => $this->t('Add more'),
         '#name' => 'add_zone_' . $i,
@@ -173,7 +254,7 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
       ];
 
       // Delete page button
-      $form['pages_container'][$i]['delete_page'] = [
+      $form['draggable_elements']['pages_container'][$i]['delete_page'] = [
         '#type' => 'submit',
         '#value' => $this->t('Delete page'),
         '#name' => 'delete_page_' . $i,
@@ -185,6 +266,13 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
         '#page_index' => $i,
       ];
     }
+
+    // Add the necessary library.
+    $form['#attached']['library'][] = 'sfmc_personalization/page_sortable';
+    // Add the necessary JavaScript to make the elements draggable.
+    $form['#attached']['drupalSettings']['sfmc_personalization']['sortable'] = [
+      'selector' => '.draggable-elements-wrapper #edit-pages-container details',
+    ];
 
     // Add more pages button
     $form['add_page'] = [
@@ -204,18 +292,35 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
   }
 
   /**
+   * Ajax callback to update the path field based on path type selection.
+   */
+  public function updateConditionField(array &$form, FormStateInterface $form_state) {
+    $trigger = $form_state->getTriggeringElement();
+    $parents = $trigger['#parents'];
+    $page_index = $parents[1];
+    return $form['pages_container'][$page_index]['condition_wrapper'];
+  }
+
+  /**
+   * Validates the regex pattern.
+   */
+  public function validateRegexPattern($element, FormStateInterface $form_state, $form) {
+    $value = $element['#value'];
+    if (!empty($value)) {
+      // Test if the pattern is valid
+      if (@preg_match($value, '') === FALSE) {
+        $form_state->setError($element, $this->t('Invalid regular expression pattern.'));
+      }
+    }
+  }
+
+  /**
    * Ajax callback to update the entire form.
    */
   public function updateForm(array &$form, FormStateInterface $form_state) {
     return $form;
   }
 
-  /**
-   * Ajax callback to update the default page options.
-   */
-  public function updateDefaultPageOptions(array &$form, FormStateInterface $form_state) {
-    return $form['default_page_type'];
-  }
 
   /**
    * Ajax callback to update the pages container.
@@ -230,6 +335,8 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
   public function updateContentZones(array &$form, FormStateInterface $form_state) {
     $trigger = $form_state->getTriggeringElement();
     $page_index = $trigger['#page_index'];
+    // $zone_index = $trigger['#zone_index'];
+    // unset($form['pages_container'][$page_index]['content_zones'][$zone_index]);
     return $form['pages_container'][$page_index]['content_zones'];
   }
 
@@ -249,9 +356,22 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
     $trigger = $form_state->getTriggeringElement();
     $page_index = $trigger['#page_index'];
     $page_count = $form_state->get('page_count');
+    $zone_count = $form_state->get(['page_count_' . $page_index, 'zone_count']);
+    // Get the current values
+    $values = $form_state->getValue('pages_container');
+
+    // Remove the triggered page
+    unset($values[$page_index]);
+
+    // Re-index the array
+    $values = array_values($values);
+
+    // Set the updated values back
+    $form_state->setValue('pages_container', $values);
 
     if ($page_count > 1) {
       $form_state->set('page_count', $page_count - 1);
+      $form_state->unsetValue(['page_count_' . $page_index, 'zone_count']);
     }
 
     $form_state->setRebuild();
@@ -263,8 +383,9 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
   public function addZone(array &$form, FormStateInterface $form_state) {
     $trigger = $form_state->getTriggeringElement();
     $page_index = $trigger['#page_index'];
-    $zone_count = $form_state->get('zone_count_' . $page_index);
-    $form_state->set('zone_count_' . $page_index, $zone_count + 1);
+    // $zone_count = $form_state->get('zone_count_' . $page_index);
+    $zone_count = $form_state->get(['page_count_' . $page_index, 'zone_count']);
+    $form_state->set(['page_count_' . $page_index, 'zone_count'], $zone_count + 1);
     $form_state->setRebuild();
   }
 
@@ -274,10 +395,30 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
   public function removeZone(array &$form, FormStateInterface $form_state) {
     $trigger = $form_state->getTriggeringElement();
     $page_index = $trigger['#page_index'];
-    $zone_count = $form_state->get('zone_count_' . $page_index);
+    $zone_count = $form_state->get(['page_count_' . $page_index, 'zone_count']);
+
+    // Get the current values
+    $values = $form_state->getValue(['pages_container', $page_index, 'content_zones']);
+
+    // Remove the triggered zone
+    unset($values[$trigger['#zone_index']]);
+
+
+    // Backup 'add_zone' button.
+    $add_zone = $values['add_zone'];
+
+    unset($values['add_zone']);
+    // Re-index the array
+    $values = array_values($values);
+
+    // Add 'add_zone' button again.
+    $values['add_zone'] = $add_zone;
+
+    // Set the updated values back
+    $form_state->setValue(['pages_container', $page_index, 'content_zones'], $values);
 
     if ($zone_count > 1) {
-      $form_state->set('zone_count_' . $page_index, $zone_count - 1);
+      $form_state->set(['page_count_' . $page_index, 'zone_count'], $zone_count - 1);
     }
 
     $form_state->setRebuild();
@@ -290,18 +431,13 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
     $config = $this->config('sfmc_personalization.pages');
     $pages = [];
 
-    // Save default page selection
-    if ($form_state->hasValue('default_page')) {
-      $config->set('default_page', $form_state->getValue('default_page'));
-    }
-
     $values = $form_state->getValue('pages_container');
     foreach ($values as $page) {
       $content_zones = [];
       foreach ($page['content_zones'] as $zone) {
-        if (is_array($zone) && !empty($zone['label'])) {
+        if (is_array($zone) && !empty($zone['name'])) {
           $content_zones[] = [
-            'label' => $zone['label'],
+            'name' => $zone['name'],
             'selector' => $zone['selector'],
           ];
         }
@@ -310,8 +446,10 @@ class SFMCPersonalizationPagesForm extends ConfigFormBase {
       if (!empty($page['name'])) {
         $pages[] = [
           'name' => $page['name'],
-          'path_type' => $page['path_type'],
-          'path' => $page['path'],
+          'condition_type' => $page['condition_type'],
+          'path' => $page['condition_wrapper']['path'] ?? '',
+          'regex' => $page['condition_wrapper']['regex'] ?? '',
+          'content_type' => $page['condition_wrapper']['content_type'] ?? [],
           'content_zones' => $content_zones,
         ];
       }

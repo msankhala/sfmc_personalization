@@ -42,9 +42,6 @@ sfmc_personalization.pages:
   type: config_object
   label: 'SFMC Personalization Pages Settings'
   mapping:
-    default_page:
-      type: integer
-      label: 'Default page type index'
     pages:
       type: sequence
       label: 'Personalization pages'
@@ -54,12 +51,12 @@ sfmc_personalization.pages:
           name:
             type: string
             label: 'Page name'
-          path_type:
+          condition_type:
             type: string
-            label: 'Path type'
-          path:
+            label: 'Condition type'
+          condition_value:
             type: string
-            label: 'Path pattern'
+            label: 'Condition value'
           content_zones:
             type: sequence
             label: 'Content zones'

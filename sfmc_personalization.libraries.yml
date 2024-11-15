@@ -1,0 +1,9 @@
+page_sortable:
+  version: 1.x
+  js:
+    js/page_sortable.js: {}
+  dependencies:
+    - core/drupal
+    - core/drupalSettings
+    - core/sortable
+    - core/once
