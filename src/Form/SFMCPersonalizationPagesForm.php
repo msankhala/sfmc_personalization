@@ -166,9 +166,9 @@ class SfmcPersonalizationPagesForm extends ConfigFormBase {
           $form['pages_container'][$index]['condition_wrapper']['regex'] = [
             '#type' => 'textfield',
             '#title' => $this->t('Regex Pattern'),
-            '#description' => $this->t('Enter a valid regular expression (e.g., ^/blog/.*$ or /^\/node\/\d+/). You can use regex to test against the page url or any class on page that will match against these page types. You need to extend you logic in Salesforce Personalize SiteMap config accordingly.'),
+            '#description' => $this->t('Enter a valid regular expression (e.g., ^/blog/.*$ or ^/node/\d+). You can use regex to test against the page url or any class on page that will match against these page types. You need to extend you logic in Salesforce Personalize SiteMap config accordingly.'),
             '#default_value' => $pages[$index]['regex'] ?? '',
-            '#element_validate' => ['::validateRegexPattern'],
+            // '#element_validate' => ['::validateRegexPattern'],
           ];
           break;
 
