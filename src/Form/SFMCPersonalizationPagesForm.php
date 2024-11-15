@@ -111,7 +111,7 @@ class SfmcPersonalizationPagesForm extends ConfigFormBase {
       $form['pages_container'][$index]['name'] = [
         '#type' => 'textfield',
         '#title' => $this->t('name'),
-        '#description' => $this->t('Enter the name of the page. This is just for display purpose.'),
+        '#description' => $this->t('Enter the name of the page(s) or page types that you are targetting. This is just for display purpose.'),
         '#default_value' => $pages[$index]['name'] ?? '',
         // '#ajax' => [
         //   'callback' => '::updateDefaultPageOptions',
@@ -129,6 +129,7 @@ class SfmcPersonalizationPagesForm extends ConfigFormBase {
           'content_type' => $this->t('Content Type'),
         ],
         '#default_value' => $pages[$index]['condition_type'] ?? 'path',
+        '#description' => $this->t('The condition let you choose whether you want to target pages based on path, regex or content types. In future more conditions can be added further.'),
         '#ajax' => [
           'callback' => '::updateConditionField',
           'wrapper' => 'condition-field-wrapper-' . $index,
@@ -154,8 +155,9 @@ class SfmcPersonalizationPagesForm extends ConfigFormBase {
           $form['pages_container'][$index]['condition_wrapper']['path'] = [
             '#type' => 'textfield',
             '#title' => $this->t('Path'),
-            '#description' => $this->t('Enter the relative path (e.g., /about-us)'),
+            '#description' => $this->t('Enter the relative path (e.g., /about-us). It will test against <em>window.location.pathname</em>. If you want to test against url differently, you need to extend you logic in Salesforce Personalize SiteMap config accordingly.'),
             '#default_value' => $pages[$index]['path'] ?? '',
+            '#element_validate' => ['::validatePathPattern'],
             // '#field_prefix' => '/',
           ];
           break;
@@ -164,7 +166,7 @@ class SfmcPersonalizationPagesForm extends ConfigFormBase {
           $form['pages_container'][$index]['condition_wrapper']['regex'] = [
             '#type' => 'textfield',
             '#title' => $this->t('Regex Pattern'),
-            '#description' => $this->t('Enter a valid regular expression (e.g., ^/blog/.*$)'),
+            '#description' => $this->t('Enter a valid regular expression (e.g., ^/blog/.*$ or /^\/node\/\d+/). You can use regex to test against the page url or any class on page that will match against these page types. You need to extend you logic in Salesforce Personalize SiteMap config accordingly.'),
             '#default_value' => $pages[$index]['regex'] ?? '',
             '#element_validate' => ['::validateRegexPattern'],
           ];
@@ -174,7 +176,7 @@ class SfmcPersonalizationPagesForm extends ConfigFormBase {
           $form['pages_container'][$index]['condition_wrapper']['content_type'] = [
             '#type' => 'select',
             '#title' => $this->t('Content Type'),
-            '#description' => $this->t('Select the content type to apply personalization'),
+            '#description' => $this->t('Select the content type to apply personalization. This will test if the current page is any of selected content type by checking the page-node-type-[content-type] class on &lt;body&gt; tag.'),
             '#options' => $this->getContentTypes(),
             '#multiple' => TRUE,
             '#default_value' => $pages[$index]['content_type'] ?? '',
@@ -199,7 +201,8 @@ class SfmcPersonalizationPagesForm extends ConfigFormBase {
       $form_state->set(['page_count_' . $index, 'zone_count'], $zone_count);
 
       // Build form elements for each content zone
-      // for ($j = 0; $j < $zone_count; $j++) {.
+      // Remove the add zone button. It will be added later in content zones
+      // array. This is removed to avoid looping it through.
       unset($zones['add_zone']);
       foreach ($zones as $key => $zone) {
         $form['pages_container'][$index]['content_zones'][$key] = [
@@ -210,15 +213,17 @@ class SfmcPersonalizationPagesForm extends ConfigFormBase {
         $form['pages_container'][$index]['content_zones'][$key]['name'] = [
           '#type' => 'textfield',
           '#title' => $this->t('Content Zone name'),
-          '#default_value' => $zones[$key]['name'] ?? '',
+          '#default_value' => $zone['name'] ?? '',
           '#size' => 30,
+          // '#description' => $this->t('The content zone name.'),
         ];
 
         $form['pages_container'][$index]['content_zones'][$key]['selector'] = [
           '#type' => 'textfield',
           '#title' => $this->t('Content Zone CSS selector'),
-          '#default_value' => $zones[$key]['selector'] ?? '',
+          '#default_value' => $zone['selector'] ?? '',
           '#size' => 30,
+          // '#description' => $this->t('The css selector to target that zone(s).'),
         ];
 
         $form['pages_container'][$index]['content_zones'][$key]['delete'] = [
@@ -290,6 +295,16 @@ class SfmcPersonalizationPagesForm extends ConfigFormBase {
   }
 
   /**
+   * Validates the path pattern.
+   */
+  public function validatePathPattern($element, FormStateInterface $form_state, $form) {
+    $value = $element['#value'];
+    if (!empty($value) && !str_starts_with($value, '/')) {
+      $form_state->setError($element, $this->t('Path must start with a forward slash (/).'));
+    }
+  }
+
+  /**
    * Validates the regex pattern.
    */
   public function validateRegexPattern($element, FormStateInterface $form_state, $form) {
@@ -322,8 +337,6 @@ class SfmcPersonalizationPagesForm extends ConfigFormBase {
   public function updateContentZones(array &$form, FormStateInterface $form_state) {
     $trigger = $form_state->getTriggeringElement();
     $page_index = $trigger['#page_index'];
-    // $zone_index = $trigger['#zone_index'];
-    // unset($form['pages_container'][$page_index]['content_zones'][$zone_index]);
     return $form['pages_container'][$page_index]['content_zones'];
   }
 
@@ -331,10 +344,8 @@ class SfmcPersonalizationPagesForm extends ConfigFormBase {
    * Submit handler for adding a new page.
    */
   public function addPage(array &$form, FormStateInterface $form_state) {
-    $trigger = $form_state->getTriggeringElement();
-    $page_index = $trigger['#page_index'];
-    // $page_count = $form_state->get('page_count');
-    // $form_state->set('page_count', $page_count + 1);
+    // $trigger = $form_state->getTriggeringElement();
+    // $page_index = $trigger['#page_index'];
     $empty_page = [
       'name' => '',
       'condition_type' => 'path',
@@ -353,10 +364,8 @@ class SfmcPersonalizationPagesForm extends ConfigFormBase {
   public function addZone(array &$form, FormStateInterface $form_state) {
     $trigger = $form_state->getTriggeringElement();
     $page_index = $trigger['#page_index'];
-    // $page_index = $trigger['#zone_index'];
+
     $empty_zone = ['name' => '', 'selector' => ''];
-    // $zone_count = $form_state->get('zone_count_' . $page_index);
-    // $zone_count = $form_state->get(['page_count_' . $page_index, 'zone_count']);
     $zones = $form_state->getValue(['pages_container', $page_index, 'content_zones'], []);
     $zones[] = $empty_zone;
     $form_state->setValue(['pages_container', $page_index, 'content_zones'], $zones);
@@ -369,23 +378,15 @@ class SfmcPersonalizationPagesForm extends ConfigFormBase {
   public function removePage(array &$form, FormStateInterface $form_state) {
     $trigger = $form_state->getTriggeringElement();
     $page_index = $trigger['#page_index'];
-    // $page_count = $form_state->get('page_count');
-    // $zone_count = $form_state->get(['page_count_' . $page_index, 'zone_count']);
-    // Get the current values
+
+    // Get the current pages.
     $values = $form_state->getValue('pages_container');
 
     // Remove the triggered page.
     unset($values[$page_index]);
 
-    // Re-index the array
-    // $values = array_values($values);
     // Set the updated values back.
     $form_state->setValue('pages_container', $values);
-
-    // If ($page_count > 1) {
-    //   $form_state->set('page_count', $page_count - 1);
-    //   $form_state->unsetValue(['page_count_' . $page_index, 'zone_count']);
-    // }.
     $form_state->setRebuild();
   }
 
@@ -395,28 +396,17 @@ class SfmcPersonalizationPagesForm extends ConfigFormBase {
   public function removeZone(array &$form, FormStateInterface $form_state) {
     $trigger = $form_state->getTriggeringElement();
     $page_index = $trigger['#page_index'];
-    // $zone_count = $form_state->get(['page_count_' . $page_index, 'zone_count']);
-    // Get the current values.
-    $values = $form_state->getValue(['pages_container', $page_index, 'content_zones']);
+
+    // Get the current content zones.
+    $content_zones = $form_state->getValue(['pages_container', $page_index, 'content_zones']);
 
     // Remove the triggered zone.
-    unset($values[$trigger['#zone_index']]);
+    unset($content_zones[$trigger['#zone_index']]);
 
-    // Backup 'add_zone' button.
-    $add_zone = $values['add_zone'];
-
-    // unset($values['add_zone']);
-    // Re-index the array
-    // $values = array_values($values);
-    // Add 'add_zone' button again.
-    $values['add_zone'] = $add_zone;
 
     // Set the updated values back.
-    $form_state->setValue(['pages_container', $page_index, 'content_zones'], $values);
+    $form_state->setValue(['pages_container', $page_index, 'content_zones'], $content_zones);
 
-    // If ($zone_count > 1) {
-    //   $form_state->set(['page_count_' . $page_index, 'zone_count'], $zone_count - 1);
-    // }.
     $form_state->setRebuild();
   }
 
