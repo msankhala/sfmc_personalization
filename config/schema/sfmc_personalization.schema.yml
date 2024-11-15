@@ -18,7 +18,6 @@ sfmc_personalization.settings:
       label: 'Allowed Domains'
       sequence:
         type: string
-      validation_criteria: 'valid_domain'
     content_zones:
       type: sequence
       label: 'Global Content Zones'
@@ -36,7 +35,6 @@ sfmc_personalization.settings:
       label: 'User Fields'
       sequence:
         type: string
-      description: 'Map Drupal user fields to SFMC attributes'
 
 sfmc_personalization.pages:
   type: config_object

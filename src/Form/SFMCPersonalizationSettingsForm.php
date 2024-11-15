@@ -7,7 +7,7 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Entity\EntityFieldManagerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
-class SFMCPersonalizationSettingsForm extends ConfigFormBase {
+class SfmcPersonalizationSettingsForm extends ConfigFormBase {
 
   /**
    * The entity field manager service.
