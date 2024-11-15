@@ -138,7 +138,7 @@ function getPageTypes() {
         consents: [{
             purpose: SalesforceInteractions.mcis.ConsentPurpose.Personalization,
             // @todo: See if this needs to be provided dynamically.
-            provider: 'CCF Consent Manager',
+            provider: 'Consent Manager',
             status: SalesforceInteractions.ConsentStatus.OptIn,
           }],
     }).then(() => {
