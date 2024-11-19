@@ -52,6 +52,8 @@ function sfmc_personalization_preprocess_page(array &$variables) {
   $variables['#attached']['drupalSettings']['sfmc_personalize']['global_config'] = $global_settings;
   $variables['#attached']['drupalSettings']['sfmc_personalize']['pages_config'] = $sfmc_pages_config->get('pages');
 
+  // Add cache context to ensure settings vary by user.
+  $variables['#cache']['contexts'][] = 'user';
 }
 
 /**
