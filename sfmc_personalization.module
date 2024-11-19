@@ -47,6 +47,12 @@ function sfmc_personalization_preprocess_page(array &$variables) {
     }
     $global_settings['user_data'] = $user_data;
   }
+  // Get the current node and its content type.
+  $current_node = \Drupal::routeMatch()->getParameter('node');
+  if ($current_node instanceof \Drupal\node\NodeInterface) {
+    $content_type = $current_node->getType();
+  }
+  $variables['#attached']['drupalSettings']['path']['contentType'] = $content_type;
 
   // Attach the settings to drupalSettings.
   $variables['#attached']['drupalSettings']['sfmc_personalize']['global_config'] = $global_settings;
